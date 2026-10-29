@@ -1,0 +1,13 @@
+import {test} from 'node:test';
+import assert from 'node:assert/strict';
+import {webcrypto} from 'node:crypto';
+import worker from './worker.mjs';
+globalThis.crypto??=webcrypto;
+const origin='https://test.example';
+const valid={jobs:[],invoices:[],services:[['Oil','',1999]],activity:[],settings:{name:'Master Motors',tax:18}};
+function db(){let state=null;return {prepare(sql){let args=[];return {bind(...a){args=a;return this},async first(){if(sql.includes('FROM sessions'))return {token_hash:'valid'};if(sql.includes('SELECT data'))return state;if(sql.includes('SELECT version'))return state;return null},async run(){if(sql.startsWith('INSERT OR IGNORE INTO workshop')){if(state)return {meta:{changes:0}};state={data:args[0],version:1,last_mutation:args[2]};return {meta:{changes:1}}}if(sql.startsWith('UPDATE workshop')){if(!state||state.version!==args[3])return {meta:{changes:0}};state={data:args[0],version:state.version+1,last_mutation:args[2]};return {meta:{changes:1}}}return {meta:{changes:1}}}}}}}
+const request=(path,method='GET',body,auth=true,requestOrigin=origin)=>new Request(origin+'/api/'+path,{method,headers:{'Content-Type':'application/json',Origin:requestOrigin,...(auth?{Cookie:'mm_session='+'a'.repeat(64)}:{})},...(body?{body:JSON.stringify(body)}:{})});
+test('unauthenticated requests cannot read workshop records',async()=>{const response=await worker.fetch(request('state','GET',null,false),{DB:db()});assert.equal(response.status,401)});
+test('cross-origin writes rejected before database mutation',async()=>{assert.equal((await worker.fetch(request('state','PUT',{state:valid,version:0,mutation:'x'},true,'https://attacker.example'),{DB:db()})).status,403)});
+test('cloud writes persist, retry safely and reject stale updates',async()=>{const env={DB:db()};let response=await worker.fetch(request('state','PUT',{state:valid,version:0,mutation:'first'}),env);assert.equal(response.status,200);assert.equal((await response.json()).version,1);response=await worker.fetch(request('state','GET'),env);assert.deepEqual((await response.json()).state,valid);response=await worker.fetch(request('state','PUT',{state:valid,version:0,mutation:'first'}),env);assert.equal(response.status,200);response=await worker.fetch(request('state','PUT',{state:valid,version:0,mutation:'stale'}),env);assert.equal(response.status,409);response=await worker.fetch(request('state','PUT',{state:{...valid,settings:{name:'Updated',tax:18}},version:1,mutation:'next'}),env);assert.equal((await response.json()).version,2)});
+test('invalid financial data rejected',async()=>{const response=await worker.fetch(request('state','PUT',{state:{...valid,services:[['Oil','',-100]]},version:0,mutation:'bad'}),{DB:db()});assert.equal(response.status,400)});

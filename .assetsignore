@@ -1,6 +1,0 @@
-# Publish only the four browser assets. Exclude .git, build metadata and documentation.
-*
-!index.html
-!style.css
-!app.js
-!auth.js
