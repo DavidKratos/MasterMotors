@@ -32,3 +32,14 @@ Run `node --test worker.test.mjs`.
 
 Prices are editable. Petromin reference package rates are starting prices excluding GST;
 other rates remain labelled samples. No affiliation with Petromin or myTVS.
+
+## Invoice and estimate layout
+
+The reference-style A4 document includes business and customer details, HSN/SAC,
+quantity, unit, rate, totals, amount in words, terms, bank details and a blank
+authorized-signatory area. Configure private bank and contact details in Settings.
+New invoices snapshot the current business settings and job/customer details.
+Existing issued invoices retain their original data and totals; missing legacy
+fields stay blank. The reference customer and signature are not copied.
+
+Run `node --test invoice.test.mjs` for document-renderer checks.
